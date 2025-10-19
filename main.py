@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -18,6 +19,7 @@ if not OPENROUTER_API_KEY:
     raise RuntimeError(
         "OPENROUTER_API_KEY is not set. Please export your OpenRouter API key to the environment."
     )
+
 
 # Choose any OpenRouter-supported model; adjust as needed
 # See https://openrouter.ai/models for options
@@ -50,9 +52,12 @@ skills = locate_skills("./skills")
 skills_list = "\n".join([f"- Name: {skill.name} | Description: {skill.description}" for skill in skills])
 full_prompt = f"{base_prompt}{skills_list}\n"
 
+server = MCPServerStdio('uvx', args=['mcp-run-python@latest', 'stdio'], timeout=10)
+
 agent = Agent(
     instructions=full_prompt,
     model=model,
+    toolsets=[server],
 )
 
 
@@ -129,7 +134,8 @@ def load_file_content(ctx: RunContext[int], file_path: str) -> str:
 
 
 async def main():
-    await agent.to_cli()
+    async with agent.run_mcp_servers():
+        await agent.to_cli()
 
 
 if __name__ == "__main__":
