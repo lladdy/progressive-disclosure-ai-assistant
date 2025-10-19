@@ -10,7 +10,6 @@ Architecture:
 - Skills may include resources and REFERENCE.md files
 """
 
-import os
 from pathlib import Path
 from typing import Dict, List, Optional
 import yaml

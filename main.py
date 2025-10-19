@@ -1,14 +1,9 @@
 import asyncio
+import logging
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 
-from pydantic_ai import Agent, RunContext
-from pydantic_ai.mcp import MCPServerStdio
-from pydantic_ai.models.openai import OpenAIChatModel
-from pydantic_ai.providers.openai import OpenAIProvider
-
-from skill_loader import locate_skills, get_skill_content
+from agent import ProgressiveDisclosureAgent
 
 # Load environment variables from a .env file (if present) into os.environ
 load_dotenv()
@@ -20,122 +15,18 @@ if not OPENROUTER_API_KEY:
         "OPENROUTER_API_KEY is not set. Please export your OpenRouter API key to the environment."
     )
 
-
-# Choose any OpenRouter-supported model; adjust as needed
-# See https://openrouter.ai/models for options
-model = OpenAIChatModel(
-    "anthropic/claude-3.5-sonnet",
-    provider=OpenAIProvider(api_key=OPENROUTER_API_KEY, base_url="https://openrouter.ai/api/v1"),
+logger = logging.getLogger(__name__)
+# configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-
-base_prompt = """
-You are a concise, helpful assistant with access to a set of skills. Use these rules when answering:
-
-- Goal: Answer the user's question as directly and helpfully as possible. Use skills only when the user's request depends on skill-specific content or when the user explicitly asks you to use a skill.
-- Tools available:
-  - list_skill_files(skill_name): returns a newline-separated list of file paths in the given skill's folder.
-  - load_file_content(file_path): returns the textual contents of the specified file.
-- Always prefer the SKILL.md file for a skill as the canonical documentation. Use list_skill_files to discover SKILL.md and other files, then use load_file_content to read any file you need.
-- Do not invent file names or claim to have read files you have not loaded. If you need information from a skill, explicitly call the appropriate tools.
-- Before calling any tool, write a one-line "Tool plan:" that states which tool(s) you will call and why.
-- After using tools, produce a concise final answer. If you used skill files, include a short "Sources:" section listing the file paths you consulted and 1–2 short quoted snippets (if helpful).
-- If the user's request is ambiguous or missing critical details, ask the user for clarification instead of making assumptions.
-- If a skill is not relevant, answer directly without calling tools.
-- Keep responses brief, avoid unnecessary detail, and avoid unsafe or disallowed instructions.
-
-You have the following skills available:
-
-"""
-
-# Build the rest of the prompt using locate_skills
-skills = locate_skills("./skills")
-skills_list = "\n".join([f"- Name: {skill.name} | Description: {skill.description}" for skill in skills])
-full_prompt = f"{base_prompt}{skills_list}\n"
-
-server = MCPServerStdio('uvx', args=['mcp-run-python@latest', 'stdio'], timeout=10)
-
-agent = Agent(
-    instructions=full_prompt,
-    model=model,
-    toolsets=[server],
-)
-
-
-@agent.tool
-def list_skill_files(ctx: RunContext[int], skill_name: str) -> str:
-    """
-    List all files in the folder for the skill with the given name.
-
-    Args:
-        ctx: RunContext (unused here, but required by the tool interface)
-        skill_name: The human-readable name field from the skill's frontmatter
-
-    Returns:
-        A newline-separated list of file paths contained in the skill's folder,
-        or a helpful message if the skill is not found or fails to load.
-    """
-    # Prefer exact match on name, then fallback to case-insensitive match
-    target = None
-    for s in skills:
-        if s.name == skill_name:
-            target = s
-            break
-    if target is None:
-        lowered = skill_name.lower().strip()
-        for s in skills:
-            if s.name.lower().strip() == lowered:
-                target = s
-                break
-
-    if target is None:
-        available = ", ".join(sorted({s.name for s in skills}))
-        return f"Skill '{skill_name}' not found. Available skills: {available}"
-
-    try:
-        content = get_skill_content(target.skill_path)
-        # Include SKILL.md explicitly along with other files discovered recursively
-        all_files = [str(target.skill_path / "SKILL.md")] + content.other_files
-        return "\n".join(all_files)
-    except Exception as e:
-        return f"Failed to list files for '{skill_name}': {e}"
-
-
-@agent.tool
-def load_file_content(ctx: RunContext[int], file_path: str) -> str:
-    """
-    Load and return the content of the file at the given path.
-
-    Args:
-        ctx: RunContext (unused by this tool)
-        file_path: Absolute or relative path to a file
-
-    Returns:
-        The textual content of the file, or an error message if the file
-        doesn't exist, isn't a file, is too large, or can't be decoded.
-    """
-    try:
-        p = Path(file_path)
-        if not p.exists():
-            return f"File not found: {file_path}"
-        if not p.is_file():
-            return f"Path is not a file: {file_path}"
-        # Guard against accidentally loading very large files
-        try:
-            size = p.stat().st_size
-            if size > 5 * 1024 * 1024:  # 5 MB limit
-                return f"File is too large to display ({size} bytes): {file_path}"
-        except Exception:
-            # If stat fails, continue and try reading
-            pass
-        # Read as text; replace undecodable bytes to avoid exceptions
-        return p.read_text(encoding="utf-8", errors="replace")
-    except Exception as e:
-        return f"Failed to read file '{file_path}': {e}"
-
 
 async def main():
-    async with agent.run_mcp_servers():
-        await agent.to_cli()
+    agent = ProgressiveDisclosureAgent(OPENROUTER_API_KEY, "./skills")
+    logger.info(f"Built agent prompt:")
+    logger.info(agent.prompt)
+    await agent.run()
 
 
 if __name__ == "__main__":
