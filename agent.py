@@ -9,7 +9,7 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from skill_loader import locate_skills, get_skill_content
 
 BASE_PROMPT = """
-        You are a concise, helpful assistant with access to a set of skills. Use these rules when answering:
+You are a concise, helpful assistant with access to a set of skills. Use these rules when answering:
 
 - Goal: Answer the user's question as directly and helpfully as possible. Use skills only when the user's request depends on skill-specific content or when the user explicitly asks you to use a skill.
 - Tools available:
