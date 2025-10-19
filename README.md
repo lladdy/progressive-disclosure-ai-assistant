@@ -21,7 +21,3 @@ Notes
 - To run the assistant, try `python main.py` from the repository root (assumes Python 3.10+ and any required dependencies).
 - Add new skills under `skills/` following the existing patterns.
 
-License
--------
-(Include your preferred license here.)
-
