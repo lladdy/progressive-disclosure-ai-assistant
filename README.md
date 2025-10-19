@@ -6,7 +6,7 @@ A small demonstration AI assistant that uses a "skills" pattern (Claude-like ski
 Quick overview
 --------------
 - Skills live in the `skills/` directory (each skill has its own subfolder and implementation files).
-- `main.py` contains the assistant runner and `skill_loader.py` handles loading available skills.
+- `agent.py` contains the assistant and `skill_loader.py` handles loading available skills.
 
 How it demonstrates progressive disclosure
 -----------------------------------------
