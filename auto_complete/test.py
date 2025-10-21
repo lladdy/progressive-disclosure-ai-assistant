@@ -1,4 +1,4 @@
-# myorm.py
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -209,13 +209,13 @@ class RelationRef(Generic[M_co], BaseRef):
         self._target_model = target_model
 
     def __getattr__(self, name: str):
-        # Grab the descriptor from the *target* model
+        # Grab the descriptor from the target model WITHOUT triggering descriptor protocol
         try:
-            desc = getattr(self._target_model, name)
-        except AttributeError as e:
+            desc = self._target_model.__dict__[name]
+        except KeyError as e:
             raise AttributeError(f"{self._target_model.__name__} has no attribute {name!r}") from e
 
-        # Use the target model's descriptor to get a proxy rooted at target
+        # Now use the descriptor to get a proxy rooted at the target model
         prox = desc.__get__(None, self._target_model)  # FieldRef or RelationRef
         # Re-root that proxy through our current relation path
         if isinstance(prox, FieldRef):
